@@ -294,3 +294,19 @@ manhattan_lm_results_df %>%
 Density plot shows that across neighborhoods in Manhattan, increasing
 stars does not impact price, adjusting for room type, since the most
 estimates are around 0.
+
+``` r
+manhattan_lm_results_df %>% 
+  filter(str_detect(term, "room_type")) %>% 
+  ggplot(aes(x = neighborhood, y = estimate)) +
+  geom_point() + 
+  facet_grid(~term) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+<img src="linear_models_files/figure-gfm/unnamed-chunk-10-1.png" width="90%" />
+In every neighborhood in Manhattan, we have a coefficient for price on
+room type, adjusting for stars. For Battery park, going from an entire
+home to a private room costs about $100 less per night. This is
+relatively stable across almost all neighborhoods in Manhattan. Also the
+same from an entire home to a shared room.
