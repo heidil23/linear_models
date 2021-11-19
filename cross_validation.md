@@ -182,3 +182,126 @@ train_df %>%
 ```
 
 <img src="cross_validation_files/figure-gfm/unnamed-chunk-4-3.png" width="90%" />
+
+Quantify the results
+
+rmse = root mean squared error
+
+``` r
+rmse(linear_mod, test_df)
+```
+
+    ## [1] 0.7052956
+
+``` r
+rmse(smooth_mod, test_df)
+```
+
+    ## [1] 0.2221774
+
+``` r
+rmse(wiggly_mod, test_df)
+```
+
+    ## [1] 0.289051
+
+## Cross Validation iteratively
+
+Use ‘modelr::crossv\_mc’. - mc refers to Monte Carlo - partition the
+nonlinear df 100 times - defaults to 20% in the testing data set
+
+``` r
+cv_df =
+  crossv_mc(nonlin_df, 100)
+
+cv_df %>% pull(train) %>% .[[1]] %>% as_tibble()
+```
+
+    ## # A tibble: 79 × 3
+    ##       id      x       y
+    ##    <int>  <dbl>   <dbl>
+    ##  1     1 0.266   1.11  
+    ##  2     2 0.372   0.764 
+    ##  3     3 0.573   0.358 
+    ##  4     4 0.908  -3.04  
+    ##  5     6 0.898  -1.99  
+    ##  6     7 0.945  -3.27  
+    ##  7     8 0.661  -0.615 
+    ##  8     9 0.629   0.0878
+    ##  9    10 0.0618  0.392 
+    ## 10    11 0.206   1.63  
+    ## # … with 69 more rows
+
+Now we want to convert everything to tibbles instead of ‘resamples’
+
+``` r
+cv_df =
+  crossv_mc(nonlin_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Let’s fit some models…
+
+``` r
+cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x))
+  ) %>%
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+    ## # A tibble: 100 × 5
+    ##    train             test              .id   linear_mod rmse_linear
+    ##    <list>            <list>            <chr> <list>           <dbl>
+    ##  1 <tibble [79 × 3]> <tibble [21 × 3]> 001   <lm>             0.747
+    ##  2 <tibble [79 × 3]> <tibble [21 × 3]> 002   <lm>             0.602
+    ##  3 <tibble [79 × 3]> <tibble [21 × 3]> 003   <lm>             0.955
+    ##  4 <tibble [79 × 3]> <tibble [21 × 3]> 004   <lm>             0.691
+    ##  5 <tibble [79 × 3]> <tibble [21 × 3]> 005   <lm>             0.712
+    ##  6 <tibble [79 × 3]> <tibble [21 × 3]> 006   <lm>             0.610
+    ##  7 <tibble [79 × 3]> <tibble [21 × 3]> 007   <lm>             0.758
+    ##  8 <tibble [79 × 3]> <tibble [21 × 3]> 008   <lm>             0.803
+    ##  9 <tibble [79 × 3]> <tibble [21 × 3]> 009   <lm>             0.705
+    ## 10 <tibble [79 × 3]> <tibble [21 × 3]> 010   <lm>             0.959
+    ## # … with 90 more rows
+
+Let’s fit some additional models
+
+``` r
+cv_df = cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>%
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Look at the output Ideally using a boxplot
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    rmse_linear:rmse_wiggly,
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_boxplot()
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-10-1.png" width="90%" />
+
+Boxplots help us understand across 100 testing and training datasets,
+which one had the lowest rmse.

@@ -95,3 +95,84 @@ train_df %>%
   geom_line(aes(y = pred))
 ```
 
+Quantify the results
+
+rmse = root mean squared error
+
+```{r}
+rmse(linear_mod, test_df)
+rmse(smooth_mod, test_df)
+rmse(wiggly_mod, test_df)
+```
+
+## Cross Validation iteratively
+
+Use 'modelr::crossv_mc'.
+- mc refers to Monte Carlo
+- partition the nonlinear df 100 times
+- defaults to 20% in the testing data set
+
+```{r}
+cv_df =
+  crossv_mc(nonlin_df, 100)
+
+cv_df %>% pull(train) %>% .[[1]] %>% as_tibble()
+```
+
+Now we want to convert everything to tibbles instead of 'resamples'
+
+```{r}
+cv_df =
+  crossv_mc(nonlin_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Let's fit some models...
+
+```{r}
+cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x))
+  ) %>%
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Let's fit some additional models
+
+```{r}
+cv_df = cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>%
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Look at the output
+Ideally using a boxplot
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    rmse_linear:rmse_wiggly,
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_boxplot()
+```
+
+Boxplots help us understand across 100 testing and training datasets, which one had the lowest rmse.
+
